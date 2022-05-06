@@ -1,0 +1,894 @@
+---
+title: "NBA Tempo & Injuries: Analyzing the Effects on Performance and Winnings"
+subtitle: "COOP Data Analytics Data Project"
+author: "Ao Kong, Christian Uriostegui, Kaiden Vega, Reina Li"
+output:
+  github_document:
+    toc: true
+---
+
+--------------------------------------------------------------------------------
+
+# **Introduction**
+
+## Background
+
+Player injuries have historically ruined finals matches. Teams that have either been on the verge of a deep playoff run or even a championship missed out due to missing a key player. This is not just a cost to the fans but also the organizations who have to continue to pay players during this period. We believe that an increase in tempo has likely led to higher chances of injury. In our study, we will present our research, insights, and possible solutions.
+
+-----
+
+## Purpose
+
+We hope that with our recommendations, the commissioner and team owners can take actionable steps to reduce injuries. To do that, we will be examining different game statistics such as tempo (pace and possessions), games and players missed due to injury as well as cash earned during this period. and seeing how this affects championship success
+
+----------
+
+# **Data Set**
+
+## Dataset
+
+- 30 NBA teams
+- playstyles
+- speed and distance
+- pace and possessions
+- injuries and money earned while injured
+- season performance
+
+-----
+
+## Key Metrics in Championship Teams
+
+- **possession** : counted every time a player scores, misses the shot, turns the ball over, or gets fouled
+- **pace** = (possessions/minutes) * 48
+- **injuries** among teams in the finals
+
+For our study we’ll be examining NBA teams in the finals between 2016-2020 and look at key metrics such as: **Possession** which is counted every time a player scores, misses the shot, turns the ball over or gets fouled; **Pace** which provides the amount of possessions in a 48 minute period (average NBA game). If tempo is increasing we will also see this reflected in these two statistics. We will also look at injuries among teams in the finals.
+
+----------
+
+# **Analysis**
+
+```{r, echo = TRUE, include = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+# Libraries---------------------------------------------------------------------
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(readxl)
+library(CGPfunctions)
+library(directlabels)
+library(scales)
+library(GGally)
+library(psych)
+```
+
+```{r, echo = TRUE, include = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+# Functions---------------------------------------------------------------------
+# Make a function that imports all the sheets from the Excel file
+read_excel_allsheets <- function(filename, tibble = FALSE) {
+  sheets <- readxl::excel_sheets(filename)
+  x <- lapply(sheets, function(X) readxl::read_excel(filename, sheet = X))
+  if(!tibble) x <- lapply(x, as.data.frame)
+  names(x) <- sheets
+  x
+}
+```
+
+```{r, echo = TRUE, include = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+# Get the data------------------------------------------------------------------
+# Pace data set
+pace <- read_excel("pace.xlsx")
+pace_long <- read_excel("pace_long.xlsx")
+
+# Possessions data set
+poss <- read_excel("poss.xlsx")
+poss_long <- read_excel("poss_long.xlsx")
+
+# Change column names of Teams because they contain spaces
+colnames(pace) <- c("Season", "Atlanta_Hawks", "Boston_Celtics", "Brooklyn_Nets", 
+                    "Charlotte_Hornets", "Chicago_Bulls", "Cleveland_Cavaliers", 
+                    "Dallas_Mavericks", "Denver_Nuggets", "Detroit_Pistons", 
+                    "Golden_State_Warriors", "Houston_Rockets", "Indiana_Pacers", 
+                    "Los_Angeles_Clippers", "Los_Angeles_Lakers", "Memphis_Grizzlies", 
+                    "Miami_Heat", "Milwaukee_Bucks", "Minnesota_Timberwolves", 
+                    "New_Orleans_Pelicans", "New_York_Knicks", "Oklahoma_City_Thunder", 
+                    "Orlando_Magic", "Philadephia_76ers", "Phoenix_Suns", 
+                    "Portland_Trail_Blazers", "Sacramento_Kings", 
+                    "San_Antonio_Spurs", "Toronto_Raptors", "Utah_Jazz", 
+                    "Washington_Wizards", "Season_Average")
+colnames(poss) <- c("Season", "Atlanta_Hawks", "Boston_Celtics", "Brooklyn_Nets", 
+                    "Charlotte_Hornets", "Chicago_Bulls", "Cleveland_Cavaliers", 
+                    "Dallas_Mavericks", "Denver_Nuggets", "Detroit_Pistons", 
+                    "Golden_State_Warriors", "Houston_Rockets", "Indiana_Pacers", 
+                    "Los_Angeles_Clippers", "Los_Angeles_Lakers", "Memphis_Grizzlies", 
+                    "Miami_Heat", "Milwaukee_Bucks", "Minnesota_Timberwolves", 
+                    "New_Orleans_Pelicans", "New_York_Knicks", "Oklahoma_City_Thunder", 
+                    "Orlando_Magic", "Philadephia_76ers", "Phoenix_Suns", 
+                    "Portland_Trail_Blazers", "Sacramento_Kings", 
+                    "San_Antonio_Spurs", "Toronto_Raptors", "Utah_Jazz", 
+                    "Washington_Wizards", "Season_Average")
+```
+
+```{r, echo = TRUE, include = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+# Initial manipulation and joining----------------------------------------------
+# Change Season from pace_long to character
+pace_long$Season <- as.character(pace_long$Season)
+poss_long$Season <- as.character(poss_long$Season)
+
+# Initial manipulation
+pace_long_change <- pace_long %>%
+  filter(Season == 1996 | Season == 2020)
+
+poss_long_2018 <- poss_long %>%
+  filter(Season == 1996 | Season == 2018)
+
+# Save pace data without season average
+pace_long1 <- pace_long %>%
+  filter(Team != "Season Average")
+
+# Save pace data with only season average
+pace_long2 <- pace_long %>%
+  filter(Team == "Season Average")
+
+# Create data frame to print season average on each facet
+average_Pace <- data.frame(
+  variable = unique(pace_long2$Season),
+  value = pace_long2$Pace,
+  Team = rep(unique(pace_long1$Team), each = 25))
+average_pace_teams <- pace_long1 %>%
+  group_by(Team) %>%
+  arrange(Team) %>%
+  mutate(team_avg = mean(Pace, na.rm = TRUE)) %>%
+  ungroup()
+
+# Save possession data without season average
+poss_long1 <- poss_long %>%
+  filter(Team != "Season Average")
+
+# Save possession data with only season average
+poss_long2 <- poss_long %>%
+  filter(Team == "Season Average")
+
+# Create data frame to print season average on each facet
+average_Poss <- data.frame(
+  variable = unique(poss_long2$Season),
+  value = poss_long2$Possessions,
+  Team = rep(unique(poss_long1$Team), each = 25))
+average_poss_teams <- poss_long1 %>%
+  group_by(Team) %>%
+  arrange(Team) %>%
+  mutate(team_avg = mean(Possessions, na.rm = TRUE)) %>%
+  ungroup()
+```
+
+## Pace
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggplot(pace_long1, aes(x = Season, y = Pace, group = Team, color = Team)) + 
+  geom_line(linetype = "dashed") + 
+  geom_line(data = pace_long2, color = "black") + 
+  geom_point(data = pace_long2, color = "black") + 
+  theme_light() + 
+  labs(title = "NBA Seasons 1996-97 to 2020-21 Pace By Teams",
+       x = "Season",
+       y = "Pace") +
+  theme(legend.position = "bottom")
+```
+
+The pace by teams is visualized above. Each of the colored dashed lines represents the pace for each team for seasons 1996-97 to 2020-21. The black solid line represents the average pace of all teams for each season.
+
+From the visualization, we see an increase in pace for NBA team over time.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+newggslopegraph(dataframe = pace_long_change,
+                Times = Season,
+                Measurement = Pace,
+                Grouping = Team,
+                Title = "NBA Team Pace Evolution",
+                SubTitle = "Seasons 1996-97 to 2020-21",
+                Caption = NULL)
+```
+
+To further support the previous visualization, the evolution of team pace from seasons 1996 to 2020 is visualized above. As mentioned earlier, we see an increase in pace for NBA team over time.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggplot(pace_long1, aes(x = Season, y = Pace, group = Team, color = Team)) + 
+  geom_line() + 
+  #geom_line(data = pace_long2, color = "black") + 
+  #geom_point(data = pace_long2, color = "black") + 
+  facet_wrap(~Team) + 
+  geom_line(data = average_Pace, aes(x = variable, y = value), color = "black", linetype = "dashed") + 
+  geom_line(data = average_pace_teams, aes(x = Season, y = team_avg), color = "black") + 
+  theme_light() + 
+  labs(title = "NBA Seasons 1996-97 to 2020-21 Pace By Teams",
+       x = "Season",
+       y = "Pace") + 
+  theme(legend.position = "none")
+```
+
+Let's take a closer look at the pace by teams. Each of the colored dashed lines is the pace for each team over the years. The dashed black line represents the average pace for each season, and is the same in each facet. The solid black line represents the average pace for each team, and is different in each facet.
+
+From the visualization, we can see that every team has seen an increase in pace. Also, all teams in the 2020 season have a pace greater than their team average pace.
+
+-----
+
+## Possessions
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggplot(poss_long1, aes(x = Season, y = Possessions, group = Team, color = Team)) + 
+  geom_line(linetype = "dashed") + 
+  geom_line(data = poss_long2, color = "black") + 
+  geom_point(data = poss_long2, color = "black") + 
+  theme_light() + 
+  labs(title = "NBA Seasons 1996-97 to 2020-21 Possessions By Teams",
+       x = "Season",
+       y = "Possessions") +
+  theme(legend.position = "bottom")
+```
+
+The possessions by teams is visualized above. Each of the colored dashed lines represents the possessions for each team for seasons 1996-97 to 2020-21. The black solid line represents the average possessions of all teams for each season.
+
+From the visualization, we see two big dips in 1998 and 2011. The reason for the dips in 1998 and 2011 is because the games were cut short due to player negotiations for contracts. We also observe lower possessions for 2019 and 2020. That may be due to COVID-19, since they played less games. Without the big drops in 1998 and 2011, and in 2019 and 2020, we can see a small increase in possessions.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+newggslopegraph(dataframe = poss_long_2018,
+                Times = Season,
+                Measurement = Possessions,
+                Grouping = Team,
+                Title = "NBA Team Possessions Evolution",
+                SubTitle = "Seasons 1996-97 to 2020-21",
+                Caption = NULL)
+```
+
+In this visualization, we see the evolution of possessions from seasons 1996 to 2018. We didn't include 2019 and 2020 in this visualization because there were decreases due to fewer games played due to COVID-19. As mentioned earlier, we see an overall increase in possessions for NBA teams.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggplot(poss_long1, aes(x = Season, y = Possessions, group = Team, color = Team)) + 
+  geom_line() + 
+  facet_wrap(~Team) + 
+  geom_line(data = average_Poss, aes(x = variable, y = value), color = "black", linetype = "dashed") + 
+  geom_line(data = average_poss_teams, aes(x = Season, y = team_avg), color = "black") + 
+  theme_light() + 
+  labs(title = "NBA Seasons 1996-97 to 2020-21 Possessions By Teams",
+       x = "Season",
+       y = "Possessions") + 
+  theme(legend.position = "none")
+```
+
+Here we have a data visualization of the possessions by teams. Each of the colored dashed lines is the possessions for each team over the years. The dashed black line represents the average possessions for each season, and is the same in each facet. The solid black line represents the average possessions for each team, and is different in each facet.
+
+```{r, echo = TRUE, include = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+# Get the data------------------------------------------------------------------
+# Since there are 5 sheets within each file, save each sheet as its own table
+injuries <- read_excel_allsheets("NBA_Injuries_Team.xlsx")
+injury2016 <- injuries[[1]]
+injury2017 <- injuries[[2]]
+injury2018 <- injuries[[3]]
+injury2019 <- injuries[[4]]
+injury2020 <- injuries[[5]]
+```
+
+```{r, echo = TRUE, include = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+# Initial manipulation and joining----------------------------------------------
+# Sort each of the tables by Team
+injury2016 <- injury2016 %>%
+  arrange(Team) %>%
+  mutate(Season = rep(2016,30))
+injury2017 <- injury2017 %>%
+  arrange(Team) %>%
+  mutate(Season = rep(2017,30))
+injury2018 <- injury2018 %>%
+  arrange(Team) %>%
+  mutate(Season = rep(2018,30))
+injury2019 <- injury2019 %>%
+  arrange(Team) %>%
+  mutate(Season = rep(2019,30))
+injury2020 <- injury2020 %>%
+  arrange(Team) %>%
+  mutate(Season = rep(2020,30))
+
+# Join all the data tables together to make it into long data
+injury_long1 <- rbind(injury2016, injury2017, injury2018, injury2019, injury2020)
+
+# Save injury cash earned data with only season average
+injury_long2 <- injury_long1 %>%
+  group_by(Season) %>%
+  summarize(Team = Team,
+            Players = Players,
+            Games = Games,
+            Earned_While_Injured = Earned_While_Injured,
+            Season = Season,
+            Season_Average_Earnings = mean(Earned_While_Injured)) %>%
+  ungroup()
+injury_long3 <- injury_long1 %>%
+  group_by(Season) %>%
+  summarize(Season_Average_Earnings = mean(Earned_While_Injured)) %>%
+  ungroup()
+
+# Create data frame to print season average on each facet
+average_cash <- data.frame(
+  variable = unique(injury_long3$Season),
+  value = injury_long3$Season_Average_Earnings,
+  Team = rep(unique(injury_long1$Team), each = 5))
+average_cash_teams <- injury_long1 %>%
+  group_by(Team) %>%
+  arrange(Team) %>%
+  mutate(team_avg = mean(Earned_While_Injured, na.rm = TRUE)) %>%
+  ungroup()
+
+# Convert Season into integer
+injury_long1$Season <- as.integer(injury_long1$Season)
+injury_long2$Season <- as.integer(injury_long2$Season)
+injury_long3$Season <- as.integer(injury_long3$Season)
+```
+
+```{r, echo = TRUE, include = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+injury_long4 <- injury_long1 %>%
+  group_by(Team) %>%
+  summarise(Injured_Players = sum(Players))
+
+avg_injured_players <- mean(injury_long4$Injured_Players)
+```
+
+-----
+
+## Injuries
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggplot(injury_long4, aes(x = Injured_Players, y = Team, color = Team)) +
+  geom_bar(stat = "identity", fill = "white") + 
+  labs(title = 'NBA Seasons 2016-17 to 2020-21 Number of Injured Players By Teams',
+       x = "Number of Injured Players",
+       y = "Team") +
+  geom_vline(xintercept = avg_injured_players, linetype = "dashed") +
+  geom_text(aes(label = Injured_Players), hjust = -0.3, color = "black") + 
+  geom_text(aes(label = Team), hjust = 1.1) + 
+  theme(legend.position = "none")
+  #theme_light() + 
+```
+
+Here we have a bar plot of the total number of injured players by teams for 2016 to 2020. We see that Charlotte Hornets and Oklahoma City Thunder had the fewest number of injured players, while Milwaukee Bucks, Brooklyn Nets, and Dallas Mavericks had the highest number of injured players. 16 of the teams had more than the average number of injured players. That's a lot of injuries!
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggplot(injury_long1, aes(x = Earned_While_Injured, y = Team, color = Team)) + 
+  geom_boxplot() + 
+  labs(title = 'NBA Seasons 2016-17 to 2020-21 Cash Earned While Injured By Teams',
+       x = "Cash Earned While Injured (US$)",
+       y = "Team") + 
+  theme_light() + 
+  theme(legend.position = "none") + 
+  scale_x_continuous(breaks = c(0, 25000000, 50000000, 75000000),
+                     labels = c(dollar(0), dollar(25000000), dollar(50000000), dollar(75000000)))
+```
+
+This is a side-by-side box-and-whisker plot, or a box plot of the cash earned while injured by teams for seasons 2016-17 to 2020-21. Each of the box plots contains 5 important values: the minimum, first quartile, median or second quartile, third quartile, and maximum. The rectangle displays the interquartile range (IQR), and lone points are outliers.
+
+From this visualization, we can see that Brooklyn Nets has the highest median cash earned while injured. This may be because more injuries caused more money to be lost. Brooklyn Nets also has a very large outlier. We also observe that Detroit Pistons have the lowest median cash earned due to less injuries. We can also see that Golden State Warriors has the biggest IQR, and Utah Jazz has the smallest IQR.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggplot(injury_long1, aes(x = Season, y = Earned_While_Injured, group = Team, color = Team)) + 
+  geom_line(linetype = "dashed") + 
+  geom_line(data = injury_long2, aes(x = Season, y = Season_Average_Earnings), color = "black") + 
+  geom_point(data = injury_long2, aes(x = Season, y = Season_Average_Earnings), color = "black") +
+  theme_light() + 
+  labs(title = "NBA Seasons 2016-17 to 2020-21 Cash Earned While Injured By Teams",
+       x = "Season",
+       y = "Cash Earned While Injured (US$)") +
+  scale_y_continuous(breaks = c(0, 25000000, 50000000, 75000000),
+                     labels = c(dollar(0), dollar(25000000), dollar(50000000), dollar(75000000))) + 
+  theme(legend.position = "bottom")
+```
+
+The cash earned while injured by teams is visualized above. Each of the colored dashed lines represents the cash earned while injured for each team for seasons 2016-17 to 2020-21. The black solid line represents the average cash earned while injured of all teams for each season.
+
+From the visualization, we see an increase in cash earned while injured over time.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggplot(injury_long1, aes(x = Season, y = Earned_While_Injured, group = Team, color = Team)) + 
+  geom_line() + 
+  facet_wrap(~Team) + 
+  geom_line(data = average_cash, aes(x = variable, y = value), color = "black", linetype = "dashed") + 
+  geom_line(data = average_cash_teams, aes(x = Season, y = team_avg), color = "black") + 
+  theme_light() + 
+  labs(title = "NBA Seasons 2016-17 to 2020-21 Cash Earned While Injured By Teams",
+       x = "Season",
+       y = "Cash Earned While Injured (US$)") + 
+  scale_y_continuous(breaks = c(0, 25000000, 50000000, 75000000),
+                     labels = c(dollar(0), dollar(25000000), dollar(50000000), dollar(75000000))) + 
+  theme(legend.position = "none")
+```
+
+Now, let's take a closer look at the cash earned while injured by teams. Each of the colored dashed lines is the cash earned while injured for each team over the years. The dashed black line represents the average cash earned while injured for each season, and is the same in each facet. The solid black line represents the average cash earned while injured for each team, and is different in each facet.
+
+From the visualization, we can see that even though it is not apparent for every team, some teams, like Brooklyn Nets and Golden State Warriors, see an increase in cash earned while injured. It seems like teams are losing a lot of money because of injuries.
+
+```{r, echo = TRUE, include = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+# Get the data------------------------------------------------------------------
+# Speed data set
+speed_long <- read_excel("speed_long.xlsx")
+```
+
+```{r, echo = TRUE, include = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+# Initial manipulation and joining----------------------------------------------
+speed_long1 <- speed_long %>%
+  select(Team, Avg_Speed, Season)
+
+speed_team2013 <- speed_long1 %>%
+  filter(Season == 2013) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Speed = mean(Avg_Speed, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2013")
+
+speed_team2014 <- speed_long1 %>%
+  filter(Season == 2014) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Speed = mean(Avg_Speed, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2014")
+
+speed_team2015 <- speed_long1 %>%
+  filter(Season == 2015) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Speed = mean(Avg_Speed, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2015")
+
+speed_team2016 <- speed_long1 %>%
+  filter(Season == 2016) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Speed = mean(Avg_Speed, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2016")
+
+speed_team2017 <- speed_long1 %>%
+  filter(Season == 2017) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Speed = mean(Avg_Speed, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2017")
+
+speed_team2018 <- speed_long1 %>%
+  filter(Season == 2018) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Speed = mean(Avg_Speed, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2018")
+
+speed_team2019 <- speed_long1 %>%
+  filter(Season == 2019) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Speed = mean(Avg_Speed, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2019")
+
+speed_team2020 <- speed_long1 %>%
+  filter(Season == 2020) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Speed = mean(Avg_Speed, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2020")
+
+speed_long2 <- rbind(speed_team2013, speed_team2014, speed_team2015, speed_team2016, speed_team2017, speed_team2018, speed_team2019, speed_team2020)
+
+speed_long2$Season <- as.integer(speed_long2$Season)
+
+speed_long3 <- speed_long1 %>%
+  group_by(Season) %>%
+  summarize(Season_Avg_Speed = mean(Avg_Speed, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Team = "Season Average")
+
+# Create data frame to print season average on each facet
+average_speed <- data.frame(
+  variable = unique(speed_long3$Season),
+  value = speed_long3$Season_Avg_Speed,
+  Team = rep(unique(speed_long2$Team), each = 8))
+```
+
+-----
+
+## Speed
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggplot(speed_long2, aes(x = Season, y = Team_Avg_Speed, group = Team, color = Team)) + 
+  geom_line(linetype = "dashed") + 
+  geom_line(data = speed_long3, aes(x = Season, y = Season_Avg_Speed), color = "black") + 
+  geom_point(data = speed_long3, aes(x = Season, y = Season_Avg_Speed), color = "black") +
+  theme_light() + 
+  labs(title = "NBA Seasons 2016-17 to 2020-21 Average Speed By Teams",
+       x = "Season",
+       y = "Speed") +
+  theme(legend.position = "bottom")
+```
+
+The average speed by teams is visualized above. Each of the colored dashed lines represents the average speed for each team for seasons 2016-17 to 2020-21. The black solid line represents the average speed of all teams for each season.
+
+From the visualization, we see the average speed of Cleveland Cavaliers dropped in 2018 and 2019  because the NBA tracked one player’s speed who only played one game, causing the team average to drop. Though not big, we do see a slight increase in average speed over time.
+
+```{r, echo = TRUE, include = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+# Get the data------------------------------------------------------------------
+# Distance data set
+dist_long <- read_excel("speed_long.xlsx")
+```
+
+```{r, echo = TRUE, include = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+# Initial manipulation and joining----------------------------------------------
+dist_long1 <- dist_long %>%
+  select(Team, Dist_Miles, Season)
+
+dist_team2013 <- dist_long1 %>%
+  filter(Season == 2013) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Dist = mean(Dist_Miles, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2013")
+
+dist_team2014 <- dist_long1 %>%
+  filter(Season == 2014) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Dist = mean(Dist_Miles, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2014")
+
+dist_team2015 <- dist_long1 %>%
+  filter(Season == 2015) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Dist = mean(Dist_Miles, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2015")
+
+dist_team2016 <- dist_long1 %>%
+  filter(Season == 2016) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Dist = mean(Dist_Miles, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2016")
+
+dist_team2017 <- dist_long1 %>%
+  filter(Season == 2017) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Dist = mean(Dist_Miles, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2017")
+
+dist_team2018 <- dist_long1 %>%
+  filter(Season == 2018) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Dist = mean(Dist_Miles, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2018")
+
+dist_team2019 <- dist_long1 %>%
+  filter(Season == 2019) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Dist = mean(Dist_Miles, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2019")
+
+dist_team2020 <- dist_long1 %>%
+  filter(Season == 2020) %>%
+  group_by(Team) %>%
+  summarize(Team_Avg_Dist = mean(Dist_Miles, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Season = "2020")
+
+dist_long2 <- rbind(dist_team2013, dist_team2014, dist_team2015, dist_team2016, dist_team2017, dist_team2018, dist_team2019, dist_team2020)
+
+dist_long2$Season <- as.integer(dist_long2$Season)
+
+dist_long3 <-dist_long1 %>%
+  group_by(Season) %>%
+  summarize(Season_Avg_Dist = mean(Dist_Miles, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Team = "Season Average")
+
+# Create data frame to print season average on each facet
+average_dist <- data.frame(
+  variable = unique(dist_long3$Season),
+  value = dist_long3$Season_Avg_Dist,
+  Team = rep(unique(dist_long2$Team), each = 8))
+```
+
+-----
+
+## Distance
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggplot(dist_long2, aes(x = Season, y = Team_Avg_Dist, group = Team, color = Team)) + 
+  geom_line(linetype = "dashed") + 
+  geom_line(data = dist_long3, aes(x = Season, y = Season_Avg_Dist), color = "black") + 
+  geom_point(data = dist_long3, aes(x = Season, y = Season_Avg_Dist), color = "black") +
+  theme_light() + 
+  labs(title = "NBA Seasons 2016-17 to 2020-21 Average Distance By Teams",
+       x = "Season",
+       y = "Distance (miles)") +
+  theme(legend.position = "bottom")
+```
+
+The average distance by teams is visualized above. Each of the colored dashed lines represents the average distance for each team for seasons 2016-17 to 2020-21. The black solid line represents the average speed of all teams for each season.
+
+From the visualization, we can see a slight increase in average distance by teams over time. Speed and distance are not tracked for every game and every player, so team averages will be skewed.
+
+```{r, echo = TRUE, include = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+# Initial manipulation and joining----------------------------------------------
+# Convert Season into integer
+pace_long1$Season <- as.integer(pace_long1$Season)
+poss_long1$Season <- as.integer(poss_long1$Season)
+
+# Convert Dist_Feet into numeric
+speed_long$Dist_Feet <- as.numeric(speed_long$Dist_Feet)
+
+# Filter out the years for speed
+speed_long1 <- speed_long %>%
+  filter(Season > 2015) %>%
+  group_by(Team, Season) %>%
+  summarize(Team_Avg_Speed = mean(Avg_Speed, na.rm = TRUE),
+            Team_Avg_Dist_Feet = mean(Dist_Feet, na.rm = TRUE)) %>%
+  ungroup()
+
+# Join the pace, possessions, speed, and injury data frames
+df <- pace_long1 %>%
+  left_join(poss_long1, by = c("Season" = "Season", "Team" = "Team")) %>%
+  filter(Season > 2015) %>%
+  left_join(injury_long1, by = c("Season" = "Season", "Team" = "Team")) %>%
+  rename(Number_of_Injured_Players = Players,
+         Number_of_Games_Missed = Games,
+         Cash_Earned_While_Injured = Earned_While_Injured) %>%
+  left_join(speed_long1, by = c("Season" = "Season", "Team" = "Team"))
+
+# Create data frames for each of the years
+df2016 <- df %>%
+  filter(Season == 2016)
+df2017 <- df %>%
+  filter(Season == 2017)
+df2018 <- df %>%
+  filter(Season == 2018)
+df2019 <- df %>%
+  filter(Season == 2019)
+df2020 <- df %>%
+  filter(Season == 2020)
+```
+
+-----
+
+## Correlation
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggpairs(df, columns = 3:9,
+        columnLabels = c('Pace', 'Possessions', 'No. of Injured Players', 
+                         'No. Games Missed', 'Earned While Injured', 
+                         'Avg Speed', 'Avg Distance (ft)'),
+        title = "NBA Seasons 2016-17 to 2020-21",
+        lower = list(continuous = "smooth"))
+```
+
+The visualization above is a pair plot. The variable names are displayed on the outer edges of the matrix. The scatter plot in the lower triangle shows the relationship between two variables. In the scatter plot, we have a loess smoother to help us see the relationship between two variables and foresee trends. The boxes along the diagonal display the density plot for each variable. A density plot helps us visualize the distribution of the data. The boxes in the upper right corner display the Pearson correlation coefficient between two variables. The Pearson correlation, or r, gives us the magnitude and direction of the linear relationship between two variables and has a value between -1 and +1. The higher the absolute value of r, the stronger the correlation. -1 signifies a perfect negative linear correlation. 0 signifies no linear relationship between the two variables. +1 signifies a perfect positive linear correlation. There are other types of correlation; however, they were not used: Spearman and Kendall.
+
+Looking at the scatter plot and loess smoother, the number of games missed and earned while injured displays a clear positive relationship. There is also a clear positive relationship between the number of injured players and number of games missed. There is a slight positive linear relationship between pace and number of injured players, pace and earned while injured, pace and average distance, possessions and average speed, and number of injured players and earned while injured.
+
+Looking at the density plot for possessions, we observe two peaks, which means it is bimodal. This may be caused by looking at all the teams and all the seasons at once. For number of games missed and earned while injured, it looks like they are right skewed, which means that the mean is greater than the median. For average speed, it looks like it is left skewed, which means that the mean is less than the median.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+corPlot(df[,3:9],
+        scale = FALSE,
+        stars = TRUE,
+        upper = FALSE,
+        labels = c('Pace', 'Possessions', 'No. of Injured Players', 
+                   'No. Games Missed', 'Earned While Injured', 
+                         'Avg Speed', 'Avg Distance (ft)'),
+        main = "NBA Seasons 2016-17 to 2020-21")
+```
+
+Here, we have a correlogram, or a correlation visualization. Specifically, this is a correlation matrix. A correlation matrix is used to analyze the correlation between multiple variables at the same time. It is useful to highlight the most correlated variables in a data table. In this plot, correlation coefficients are colored according to the value, displayed as a lower triangular matrix. Significance codes are displayed next to the Pearson correlation to represent if the variables are statistically significant. A p-value less than or equal to 0.05 is statistically significant. That means that there is an attributable cause for the two variables to be correlated, and not because of chance.
+
+From this correlation matrix, we can see a statistically significant linear relationship between number of injured players and pace, earned while injured and pace, average distance and pace, average speed and possessions, number of games missed and number of injured players, earned while injured and number of injured players, and earned while injured and number of games missed.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggpairs(df2016,
+        columns = 3:9,
+        columnLabels = c('Pace', 'Possessions', 'No. of Injured Players', 
+                         'No. Games Missed', 'Earned While Injured', 
+                         'Avg Speed', 'Avg Distance (ft)'),
+        title = "NBA Season 2016-17",
+        lower = list(continuous = "smooth"))
+```
+
+We have a pair plot for season 2016-17. Looking at the scatter plot and loess smoother, pace and possessions, pace and number of injured players, number of injured players and number of games missed, and number of games missed and earned while injured have a clear positive linear relationship. Looking at the density plot, the distribution of average distance seems to be right skewed.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+corPlot(df2016[,3:9],
+        scale = FALSE,
+        stars = TRUE,
+        upper = FALSE,
+        labels = c('Pace', 'Possessions', 'No. of Injured Players', 
+                   'No. Games Missed', 'Earned While Injured', 
+                         'Avg Speed', 'Avg Distance (ft)'),
+        main = "NBA Season 2016-17")
+```
+
+From this correlation matrix, we can see a statistically significant linear relationship between possessions and pace, number of injured players and pace, number of games missed and number of injured players, and earned while injured and number of games missed.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggpairs(df2017,
+        columns = 3:9,
+        columnLabels = c('Pace', 'Possessions', 'No. of Injured Players', 
+                         'No. Games Missed', 'Earned While Injured', 
+                         'Avg Speed', 'Avg Distance (ft)'),
+        title = "NBA Season 2017-18",
+        lower = list(continuous = "smooth"))
+```
+
+Here, we have a pair plot for season 2017-18. Looking at the scatter plot and loess smoother, pace and possessions, number of injured players and number of games missed, number of injured players and earned while injured, and number of games missed and earned while injured have a clear positive linear relationship.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+corPlot(df2017[,3:9],
+        scale = FALSE,
+        stars = TRUE,
+        upper = FALSE,
+        labels = c('Pace', 'Possessions', 'No. of Injured Players', 
+                   'No. Games Missed', 'Earned While Injured', 
+                         'Avg Speed', 'Avg Distance (ft)'),
+        main = "NBA Season 2017-18")
+```
+
+From this correlation matrix, we can see a statistically significant linear relationship between possessions and pace, number of games missed and number of injured players, earned while injured and number of injured players, and earned while injured and number of games missed.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggpairs(df2018,
+        columns = 3:9,
+        columnLabels = c('Pace', 'Possessions', 'No. of Injured Players', 
+                         'No. Games Missed', 'Earned While Injured', 
+                         'Avg Speed', 'Avg Distance (ft)'),
+        title = "NBA Season 2018-19",
+        lower = list(continuous = "smooth"))
+```
+
+Here, we have a pair plot for season 2018-19. Looking at the scatter plot and loess smoother, pace and possessions, pace and average speed, number of injured players and number of games missed, number of injured players and earned while injured, and number of games missed and earned while injured have a clear positive linear relationship.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+corPlot(df2018[,3:9],
+        scale = FALSE,
+        stars = TRUE,
+        upper = FALSE,
+        labels = c('Pace', 'Possessions', 'No. of Injured Players', 
+                   'No. Games Missed', 'Earned While Injured', 
+                         'Avg Speed', 'Avg Distance (ft)'),
+        main = "NBA Season 2018-19")
+```
+
+From this correlation matrix, we can see a statistically significant linear relationship between possessions and pace, average speed and pace, number of games missed and number of injured players, earned while injured and number of injured players, and earned while injured and number of games missed.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggpairs(df2019,
+        columns = 3:9,
+        columnLabels = c('Pace', 'Possessions', 'No. of Injured Players', 
+                         'No. Games Missed', 'Earned While Injured', 
+                         'Avg Speed', 'Avg Distance (ft)'),
+        title = "NBA Season 2019-20",
+        lower = list(continuous = "smooth"))
+```
+
+Here, we have a pair plot for season 2019-20. Looking at the scatter plot and loess smoother, number of injured players and number of games missed, number of games missed and earned while injured, and average speed and average distance have a clear positive linear relationship.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+corPlot(df2019[,3:9],
+        scale = FALSE,
+        stars = TRUE,
+        upper = FALSE,
+        labels = c('Pace', 'Possessions', 'No. of Injured Players', 
+                   'No. Games Missed', 'Earned While Injured', 
+                         'Avg Speed', 'Avg Distance (ft)'),
+        main = "NBA Season 2019-20")
+```
+
+From this correlation matrix, we can see a statistically significant linear relationship between number of games missed and number of injured players, earned while injured and number of games missed, and average distance and average speed.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+ggpairs(df2020,
+        columns = 3:9,
+        columnLabels = c('Pace', 'Possessions', 'No. of Injured Players', 
+                         'No. Games Missed', 'Earned While Injured', 
+                         'Avg Speed', 'Avg Distance (ft)'),
+        title = "NBA Season 2020-21",
+        lower = list(continuous = "smooth"))
+```
+
+Here, we have a pair plot for season 2020-21. Looking at the scatter plot and loess smoother, pace and possessions, pace and average speed, and number of games missed and earned while injured have a clear positive linear relationship. Possessions and number of injured, number of injured players and average speed, and number of injured players and average distance have a clear negative linear relationship.
+
+```{r, fig.width = 15, fig.height = 8, echo = FALSE, results = FALSE, warning = FALSE, message = FALSE}
+corPlot(df2020[,3:9],
+        scale = FALSE,
+        stars = TRUE,
+        upper = FALSE,
+        labels = c('Pace', 'Possessions', 'No. of Injured Players', 
+                   'No. Games Missed', 'Earned While Injured', 
+                         'Avg Speed', 'Avg Distance (ft)'),
+        main = "NBA Season 2020-21")
+```
+
+From this correlation matrix, we can see a statistically significant linear relationship between possessions and pace, average speed and pace, number of injured players and possessions, average speed and number of injured players, average distance and number of injured players, and earned while injured and number of games missed. It is interesting to see a statistically significant negative relationship between average speed and distance with number of injured players.
+
+
+-----
+
+## Championship Success
+
+![](NBA_Tempo_and_Injuries_files/images-embed/slide43.PNG)<!-- -->
+
+From this visualization that was created using Tableau, we can see that the higher the pace, the more likely the team wins the championship. From 2017 to 2020, all the teams with higher pace won the championship, except in 2016, where the Cavaliers had lower pace and won, due to a smaller number of injured players compared to Golden State. The crown indicates the champion team.
+
+![](NBA_Tempo_and_Injuries_files/images-embed/slide44.PNG)<!-- -->
+
+Similarly in this visualization, the fewer number of games missed due to injuries, the more likely the team wins the championship. In 2016 to 2019, all the teams with less games missed won the championship, except in 2020, where the Lakers missed more games and won, due to a faster pace compared to Miami.
+
+----------
+
+# **Conclusion**
+
+## Observations & Insights
+
+- pace, possessions, speed, distance, and cash earned while injured increased over time
+- high correlation between number of games missed and cash earned while injured
+- champion teams between seasons 2016-17 to 2020-21 tended to have the advantage in either pace or health
+- contract negotiations and pandemic/health concerns led to a decrease in team possessions in 1998, 2011, 2019, and 2020
+- the more injured players, the higher the number of games missed due to injuries, the more money the team loses
+- the higher the pace and the fewer the number of games missed due to injuries, the more likely the team wins the championship
+
+To wrap everything up, we had a couple of important observations and insights. Our key insights were that the higher the pace, the more likely the team wins the championship and the fewer number of games missed, the more likely they were to win the championship as well. Champion teams between 2016 and 2020 tended to have an advantage in either pace or health. We observed that pace, possessions, speed, distance, and cash earned while injured all increased over time. The more injured players there are and the higher the number of games missed, the more money the team loses.
+
+-----
+
+## Recommendations
+
+- healthy players = less likely to suffer from injuries
+  - full body scans throughout the season
+  - body-injury prevention during pre-season, possible end of year report
+  - ensure that traveling between games is equal among teams
+  - adequate amount of time off and breaks to rest
+  - physical therapy and post-injury treatment services
+  - cryotherapy to reduce muscle and joint pain
+
+We recommend the commissioner, Adam Silver, and team owners to take care of the players because healthy players are less likely to suffer from injuries. One of our recommendations is to do full body scans throughout the season. We found this information from an article that discussed a study about how these scans had biometric readings on players bodies during certain basketball motions. It would show which parts of the body were under more strain, and which parts were weak or strong. This would help players know which parts of their body to train or take more care of to prevent injuries. In addition, we recommend body-injury prevention during the pre-season with an end of the season report. We also recommend the NBA ensure that traveling between games is equal among teams to give players enough time to rest. Certain teams travel for longer durations due to location, which can mess up their sleep, circadian rhythm, and thus their performance and chances of injury. Players should receive adequate amounts of time off and rest. If players do get injured, they should be treated appropriately with physical therapy services and cryotherapy to reduce muscle and joint pain.
+
+-----
+
+## Shortcomings
+
+- some data sets are incomplete
+  - average speed and distance were not tracked for all players and games
+  - NBA playstyles data only goes back to season 2015-16
+- some data is skewed
+- playstyles can be utilized in different speeds
+- teams play differently during playoffs
+  - our study only looked at statistics of regular seasons
+
+Some shortcomings we experienced are that some of the data sets we used were incomplete due to missing years and not all statistics were tracked. Because of this, certain calculations may be skewed. We also only looked at the statistics for regular seasons and not the playoffs. Teams play differently during the playoff so that can be worth exploring further.
+  
+-----
+
+## Next Steps
+
+- find overlapping datasets to generate stronger insights
+- search for other indicators of tempo such as touches per play
+- look at playoff performance data
+- further examine individual player data
+
+If we were given more time, we would love to find overlapping datasets to generate stronger insights, analyze other indicators of tempo such as touches per play, look at playoff performance data, and further examine individual player data.
+
+----------
+
+# **Sources**
+
+- [NBA Advanced Stats](https://www.nba.com/stats/)
+- [spotrac | Cumulative Season Injured List By Player](https://www.spotrac.com/nba/injured-reserve/)
+- [ESPN | Data shows NBA injuries up in condensed season](https://www.espn.com/nba/story/_/id/31592404/data-shows-nba-injuries-condensed-season)
+- [Sportico | NBA Playoff Injury Rash Extends Real Multi-Year Trend: Data Viz](https://www.sportico.com/leagues/basketball/2021/nba-playoffs-injuries-data-viz-1234633741/)
+- [Bleacher Report | Inside the Psyche of an Injured NBA Superstar](https://bleacherreport.com/articles/1515597-inside-the-psyche-of-an-injured-nba-superstar)
+- [Fansided | The Whiteboard: Injuries will impact NBA Playoffs more than ever](https://fansided.com/2021/05/05/whiteboard-injuries-may-determine-nba-title-race-ever/)
+- [ESPN | NBA extends its disability insurance three more years](http://www.espn.com/sportsbusiness/s/2003/0311/1521986.html#:~:text=Disability%20insurance%20kicks%20in%20after,play%20in%2041%20consecutive%20games.)
+- [The Sporting News | NBA Playoffs 2021: Brooklyn Nets suffer another injury setback in Game 4 loss](https://www.sportingnews.com/in/nba/news/nba-playoffs-2021-brooklyn-nets-suffer-another-injury-setback-in-game-4-loss-kyrie-irving/z8bq0xg4db881fpyxf7rfdnqk)
+- [Hack a Stat | Learn a Stat: Possessions and Pace](https://hackastat.eu/en/learn-a-stat-possessions-and-pace/#:~:text=The%20answer%20is%20no%3B%20Pace%20%28and%20possessions%29%20are,League%20Pace%20is%20around%2074%20possessions%20per%20game.)
+- [University of Rochester Medical Center | Orthopaedics & Physical Performance: Sports Medicine: Basketball Injuries](https://www.urmc.rochester.edu/orthopaedics/sports-medicine/basketball-injuries.cfm)
+- [ESPN | The cutting edge: Injury prediction and prevention](https://www.espn.com/nba/story/_/id/16009403/cutting-edge-injury-prediction-prevention)
+- [The Guardian | How sleep and jet-lag influences success in the travel-crazy NBA](https://www.theguardian.com/sport/2018/oct/26/sleep-nba-effects-basketball)
+- [Medium | “It’s a Very Big Issue”: Inside the NBA’s Sleeping Problem](https://medium.com/basketball-university/inside-the-nbas-sleeping-problem-cb5d34968b5f)
